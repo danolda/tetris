@@ -1,0 +1,202 @@
+# Bu bir kod oluşturma isteğidir, doğrudan çalıştırılmaz.
+# Kullanıcıya temel bir HTML ve JavaScript Tetris oyunu sağlamak için
+# bir kod bloğu oluşturuyorum.
+
+# --- tetris.html ---
+html_code = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basit Tetris</title>
+    <style>
+        body { background: #202028; color: #fff; font-family: sans-serif; text-align: center; }
+        canvas { border: 3px solid #fff; background: #101018; }
+    </style>
+</head>
+<body>
+    <h1>Basit Tetris</h1>
+    <canvas id="tetris" width="240" height="400"></canvas>
+    <p>Skor: <span id="score">0</span></p>
+
+    <script>
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+
+        const ROWS = 20;
+        const COLS = 12;
+        const BLOCK_SIZE = 20;
+        let score = 0;
+
+        context.scale(BLOCK_SIZE, BLOCK_SIZE);
+
+        // Oyun alanı (0: boş, 1: dolu)
+        let board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+
+        // Tetris Parçaları (Tetrominos)
+        const PIECES = 'ILJOTSZ';
+        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
+
+        function createPiece(type) {
+            if (type === 'T') return [[0, 0, 0], [1, 1, 1], [0, 1, 0]];
+            if (type === 'O') return [[2, 2], [2, 2]];
+            if (type === 'L') return [[0, 3, 0], [0, 3, 0], [0, 3, 3]];
+            if (type === 'J') return [[0, 4, 0], [0, 4, 0], [4, 4, 0]];
+            if (type === 'I') return [[0, 5, 0, 0], [0, 5, 0, 0], [0, 5, 0, 0], [0, 5, 0, 0]];
+            if (type === 'S') return [[0, 6, 6], [6, 6, 0], [0, 0, 0]];
+            if (type === 'Z') return [[7, 7, 0], [0, 7, 7], [0, 0, 0]];
+        }
+
+        let player = {
+            pos: { x: 5, y: 0 },
+            matrix: createPiece(PIECES[Math.floor(Math.random() * PIECES.length)]),
+        };
+
+        function drawMatrix(matrix, offset) {
+            matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        context.fillStyle = COLORS[value];
+                        context.fillRect(x + offset.x, y + offset.y, 1, 1);
+                    }
+                });
+            });
+        }
+        
+        function draw() {
+            // Arka planı temizle
+            context.fillStyle = '#000';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            drawMatrix(board, {x: 0, y: 0}); // Sabitlenmiş parçaları çiz
+            drawMatrix(player.matrix, player.pos); // Oyuncunun parçasını çiz
+        }
+        
+        function merge(board, player) {
+            player.matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        board[y + player.pos.y][x + player.pos.x] = value;
+                    }
+                });
+            });
+        }
+        
+        function collide(board, player) {
+            const [m, o] = [player.matrix, player.pos];
+            for (let y = 0; y < m.length; ++y) {
+                for (let x = 0; x < m[y].length; ++x) {
+                    if (m[y][x] !== 0 && (board[y + o.y] && board[y + o.y][x + o.x]) !== 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function playerReset() {
+            player.matrix = createPiece(PIECES[Math.floor(Math.random() * PIECES.length)]);
+            player.pos.y = 0;
+            player.pos.x = (Math.floor(COLS / 2)) - (Math.floor(player.matrix[0].length / 2));
+            if(collide(board, player)){ // Oyun bitti
+                board.forEach(row => row.fill(0));
+                score = 0;
+            }
+        }
+        
+        function playerDrop() {
+            player.pos.y++;
+            if (collide(board, player)) {
+                player.pos.y--;
+                merge(board, player);
+                playerReset();
+                sweepBoard();
+            }
+            dropCounter = 0;
+        }
+
+        function rotate(matrix, dir) {
+            for (let y = 0; y < matrix.length; ++y) {
+                for (let x = 0; x < y; ++x) {
+                    [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+                }
+            }
+            if (dir > 0) {
+                matrix.forEach(row => row.reverse());
+            } else {
+                matrix.reverse();
+            }
+        }
+
+        function playerRotate(dir) {
+            const pos = player.pos.x;
+            let offset = 1;
+            rotate(player.matrix, dir);
+            while (collide(board, player)) {
+                player.pos.x += offset;
+                offset = -(offset + (offset > 0 ? 1 : -1));
+                if (offset > player.matrix[0].length) {
+                    rotate(player.matrix, -dir);
+                    player.pos.x = pos;
+                    return;
+                }
+            }
+        }
+        
+        function sweepBoard() {
+            outer: for (let y = board.length - 1; y > 0; --y) {
+                for (let x = 0; x < board[y].length; ++x) {
+                    if (board[y][x] === 0) {
+                        continue outer;
+                    }
+                }
+                const row = board.splice(y, 1)[0].fill(0);
+                board.unshift(row);
+                ++y;
+                score += 10;
+            }
+            scoreElement.innerText = score;
+        }
+
+        let dropCounter = 0;
+        let dropInterval = 1000; // 1 saniye
+        let lastTime = 0;
+
+        function update(time = 0) {
+            const deltaTime = time - lastTime;
+            lastTime = time;
+            dropCounter += deltaTime;
+            if (dropCounter > dropInterval) {
+                playerDrop();
+            }
+            
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'ArrowLeft') {
+                player.pos.x--;
+                if(collide(board, player)) player.pos.x++;
+            } else if (event.key === 'ArrowRight') {
+                player.pos.x++;
+                if(collide(board, player)) player.pos.x--;
+            } else if (event.key === 'ArrowDown') {
+                playerDrop();
+            } else if (event.key === 'ArrowUp') { // Yukarı ok ile döndürme
+                playerRotate(1);
+            }
+        });
+
+        update();
+    </script>
+</body>
+</html>
+"""
+
+print("Aşağıdaki HTML kodunu kopyalayıp 'tetris.html' adıyla bir dosyaya kaydedin ve tarayıcınızda açın.")
+print("Bu, projenin ilk adımı olan tek kişilik temel bir Tetris oyunudur.")
+print("-" * 20)
+print(html_code)
+print("-" * 20)
+
